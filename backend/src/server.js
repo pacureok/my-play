@@ -3,14 +3,16 @@ const http = require('http');
 const WebSocket = require('ws');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const path = require('path'); // Importa el módulo 'path' de Node.js
 const UnoGame = require('./models/UnoGame');
 const Mission = require('./models/Mission');
-const User = require('./models/User'); // Importar el modelo de usuario
+const User = require('./models/User');
 const { createDeck, dealCards, isValidPlay, applySpecialCardEffect, checkWinCondition } = require('./gameLogic');
 
 const app = express();
 app.use(express.json());
 app.use(cors());
+
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
@@ -22,6 +24,8 @@ const gameSockets = new Map();
 
 wss.on('connection', ws => {
   ws.on('message', async message => {
+    // Lógica del WebSocket para JOIN_GAME, PLAY_CARD, etc.
+    // ... (El código de WebSocket que ya tienes va aquí)
     const data = JSON.parse(message);
     const { type, gameId, username, card } = data;
 
@@ -73,7 +77,7 @@ wss.on('connection', ws => {
                     await user.save();
                 }
             }
-            broadcastGameState(gameId, game, 'WINNER', username);
+            broadcastGameState(gameId, game, username, 'WINNER');
             return;
         }
 
@@ -137,6 +141,15 @@ app.get('/api/missions/:username', async (req, res) => {
 
     res.json(missions);
 });
+
+// NUEVA SECCIÓN: Servir los archivos estáticos del frontend
+app.use(express.static(path.join(__dirname, '../../frontend/build')));
+
+// Enviar el archivo index.html para cualquier ruta que no sea de la API
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../../frontend/build/index.html'));
+});
+
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
