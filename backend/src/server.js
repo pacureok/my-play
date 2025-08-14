@@ -2,15 +2,15 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const mongoose = require('mongoose');
-const cors = require('cors'); // Necesitas instalarlo: npm install cors
+const cors = require('cors');
 const UnoGame = require('./models/UnoGame');
-const Mission = require('./models/Mission'); // Importar el modelo de misión
-const User = require('./models/User'); // Asumimos que tienes un modelo de usuario
+const Mission = require('./models/Mission');
+const User = require('./models/User'); // Importar el modelo de usuario
 const { createDeck, dealCards, isValidPlay, applySpecialCardEffect, checkWinCondition } = require('./gameLogic');
 
 const app = express();
 app.use(express.json());
-app.use(cors()); // Habilitar CORS para permitir peticiones desde el frontend
+app.use(cors());
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
@@ -45,7 +45,7 @@ wss.on('connection', ws => {
         gameSockets.set(gameId, []);
       }
       gameSockets.get(gameId).push(ws);
-      broadcastGameState(gameId, game);
+      broadcastGameState(gameId, game, username);
     }
     
     if (type === 'PLAY_CARD') {
@@ -63,19 +63,22 @@ wss.on('connection', ws => {
         applySpecialCardEffect(card, game);
         
         if (checkWinCondition(currentPlayer)) {
-            // Lógica para finalizar la partida y recompensar al ganador
-            // Aquí puedes actualizar la misión del usuario en la base de datos
-            const mission = await Mission.findOne({ user: currentPlayer._id, title: 'Gana una partida de UNO' });
-            if (mission) {
-                mission.isCompleted = true;
-                await mission.save();
+            const user = await User.findOne({ username });
+            if (user) {
+                const mission = await Mission.findOne({ user: user._id, title: 'Gana una partida de UNO' });
+                if (mission) {
+                    mission.isCompleted = true;
+                    await mission.save();
+                    user.points += mission.reward;
+                    await user.save();
+                }
             }
             broadcastGameState(gameId, game, 'WINNER', username);
             return;
         }
 
         await game.save();
-        broadcastGameState(gameId, game);
+        broadcastGameState(gameId, game, username);
     }
 
     if (type === 'DRAW_CARD') {
@@ -87,7 +90,7 @@ wss.on('connection', ws => {
         currentPlayer.hand.push(drawnCard);
 
         await game.save();
-        broadcastGameState(gameId, game);
+        broadcastGameState(gameId, game, username);
     }
   });
 
@@ -96,22 +99,23 @@ wss.on('connection', ws => {
   });
 });
 
-const broadcastGameState = (gameId, game, status = 'PLAYING', winner = null) => {
+const broadcastGameState = (gameId, game, currentPlayerUsername, status = 'PLAYING', winner = null) => {
     const sockets = gameSockets.get(gameId);
     if (!sockets) return;
   
     sockets.forEach(socket => {
-        // Enviar el estado completo del juego
-        socket.send(JSON.stringify({ 
+        const fullGameState = { 
             ...game.toObject(), 
             type: 'GAME_STATE_UPDATE',
             status,
-            winner
-        }));
+            winner,
+            playerHand: game.players.find(p => p.username === currentPlayerUsername).hand,
+        };
+
+        socket.send(JSON.stringify(fullGameState));
     });
 };
 
-// Rutas de API REST para misiones (no en WebSocket)
 app.get('/api/missions/:username', async (req, res) => {
     const { username } = req.params;
     const user = await User.findOne({ username });
@@ -121,7 +125,6 @@ app.get('/api/missions/:username', async (req, res) => {
 
     const missions = await Mission.find({ user: user._id, isCompleted: false });
     if (missions.length === 0) {
-        // Lógica para crear una nueva misión
         const newMission = new Mission({
             title: 'Gana una partida de UNO',
             description: 'Gana cualquier partida de UNO para completar esta misión.',
