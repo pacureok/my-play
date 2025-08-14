@@ -1,9 +1,10 @@
+// backend/src/gameLogic.js
+
 const colors = ['ro', 'az', 've', 'am'];
 const values = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'salto', 'reversa', 'mas2'];
 
 const createDeck = () => {
   let deck = [];
-  // Crear cartas de cada color
   for (const color of colors) {
     deck.push({ color, value: '0' });
     for (let i = 1; i <= 9; i++) {
@@ -18,7 +19,6 @@ const createDeck = () => {
     deck.push({ color, value: 'mas2' });
   }
 
-  // Añadir comodines
   for (let i = 0; i < 4; i++) {
     deck.push({ color: 'negro', value: 'comodin' });
     deck.push({ color: 'negro', value: 'mas4' });
@@ -47,7 +47,7 @@ const dealCards = (deck, numPlayers) => {
 
 const isValidPlay = (playedCard, currentCard) => {
   if (playedCard.color === 'negro') {
-    return true; // Los comodines siempre son válidos
+    return true;
   }
   return playedCard.color === currentCard.color || playedCard.value === currentCard.value;
 };
@@ -76,13 +76,12 @@ const applySpecialCardEffect = (card, game) => {
 
   game.turn = game.players[nextIndex].username;
 
-  // Lógica para robar cartas con +2 o +4
   if (card.value === 'mas2') {
-    const nextPlayer = game.players[nextIndex];
+    const nextPlayer = game.players.find(p => p.username === game.turn);
     nextPlayer.hand.push(game.deck.pop(), game.deck.pop());
   }
   if (card.value === 'mas4') {
-    const nextPlayer = game.players[nextIndex];
+    const nextPlayer = game.players.find(p => p.username === game.turn);
     nextPlayer.hand.push(game.deck.pop(), game.deck.pop(), game.deck.pop(), game.deck.pop());
   }
 };
