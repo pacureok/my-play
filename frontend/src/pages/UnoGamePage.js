@@ -1,14 +1,16 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import Card from '../components/Card';
-import './UnoGamePage.css'; // Añade este archivo para los estilos
+import './UnoGamePage.css';
 
-const API_BASE_URL = 'ws://localhost:3001'; // O la URL de tu backend desplegado
+// Reemplaza esta URL con la de tu backend en Vercel
+const API_BASE_URL = 'wss://my-play-6tqd.vercel.app'; 
 
 function UnoGamePage() {
   const { gameId } = useParams();
   const [gameState, setGameState] = useState(null);
-  const [username, setUsername] = useState('Jugador 1'); // Deberías obtener el nombre del usuario logeado
+  const [username, setUsername] = useState('Jugador 1'); // Debería ser el nombre de usuario autenticado
+  const [error, setError] = useState('');
   const ws = useRef(null);
 
   useEffect(() => {
@@ -17,7 +19,7 @@ function UnoGamePage() {
 
     ws.current.onopen = () => {
       console.log('Conectado al servidor WebSocket');
-      // Cuando se conecta, se une a la partida
+      // Al conectarse, se une a la partida
       ws.current.send(JSON.stringify({
         type: 'JOIN_GAME',
         gameId: gameId,
@@ -28,7 +30,12 @@ function UnoGamePage() {
     ws.current.onmessage = (event) => {
       const data = JSON.parse(event.data);
       console.log('Estado del juego recibido:', data);
-      setGameState(data);
+
+      if (data.type === 'ERROR') {
+        setError(data.message);
+      } else if (data.type === 'GAME_STATE_UPDATE') {
+        setGameState(data);
+      }
     };
 
     ws.current.onclose = () => {
@@ -47,7 +54,6 @@ function UnoGamePage() {
       alert('No es tu turno!');
       return;
     }
-    // Envía la jugada al servidor
     ws.current.send(JSON.stringify({
       type: 'PLAY_CARD',
       gameId: gameId,
@@ -61,7 +67,6 @@ function UnoGamePage() {
       alert('No es tu turno!');
       return;
     }
-    // Envía la acción de robar al servidor
     ws.current.send(JSON.stringify({
       type: 'DRAW_CARD',
       gameId: gameId,
@@ -74,9 +79,20 @@ function UnoGamePage() {
   }
 
   const isMyTurn = gameState.turn === username;
+  const currentCard = gameState.discardPile[gameState.discardPile.length - 1];
+  const opponent = gameState.players.find(p => p.username !== username);
 
   return (
     <div className="uno-game-container">
+      {gameState.status === 'WINNER' && (
+        <div className="winner-message">
+          <h1>¡{gameState.winner} ha ganado la partida!</h1>
+          <p>Felicidades, la partida ha terminado.</p>
+        </div>
+      )}
+
+      {error && <div className="error-message">{error}</div>}
+
       <div className="header">
         <h1>Partida de UNO: {gameId}</h1>
         <p>Turno de: <strong>{gameState.turn}</strong></p>
@@ -84,13 +100,26 @@ function UnoGamePage() {
       </div>
 
       <div className="game-area">
+        {opponent && (
+          <div className="opponent-hand">
+            <h3>{opponent.username}</h3>
+            <div className="cards-list">
+              {/* Muestra el reverso de las cartas del oponente */}
+              {Array(opponent.hand.length).fill(null).map((_, index) => (
+                <img key={index} src="/cartas/reverso.png" alt="Reverso de la carta" style={{ width: '80px', height: '120px', margin: '5px' }} />
+              ))}
+            </div>
+          </div>
+        )}
+        
         <div className="card-piles">
           <div className="discard-pile">
             <h3>Carta en la mesa</h3>
-            {gameState.discardPile && <Card color={gameState.discardPile.color} value={gameState.discardPile.value} />}
+            {currentCard && <Card color={currentCard.color} value={currentCard.value} />}
           </div>
           <div className="deck-pile">
             <h3>Mazo</h3>
+            <img src="/cartas/reverso.png" alt="Mazo" style={{ width: '100px', height: '150px' }} />
             <button onClick={handleDrawCard} disabled={!isMyTurn}>
               Robar Carta
             </button>
